@@ -1,40 +1,39 @@
-import { APIGatewayProxyHandlerV2 } from "aws-lambda"; // CHANGED
+import { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 
-const ddbClient = new DynamoDBClient({ region: process.env.REGION });
+const ddbDocClient = createDDbDocClient();
 
 export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
-  // CHANGED
   try {
     // Print Event
-    console.log("Event: ", event);
+    console.log("[EVENT]", JSON.stringify(event));
 
-    const commandOutput = await ddbClient.send(
-      new ScanCommand({
-        TableName: process.env.TABLE_NAME,
-      })
-    );
-    if (!commandOutput.Items) {
+    const movieId = event.pathParameters?.movieId;
+    if (!movieId) {
       return {
-        statusCode: 404,
+        statusCode: 400,
         headers: {
           "content-type": "application/json",
         },
-        body: JSON.stringify({ Message: "Invalid movie Id" }),
+        body: JSON.stringify({ message: "Missing movie Id" }),
       };
     }
-    const body = {
-      data: commandOutput.Items,
-    };
 
-    // Return Response
+    // Delete movie from DynamoDB
+    const commandOutput = await ddbDocClient.send(
+      new DeleteCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { id: parseInt(movieId) },
+      })
+    );
+
     return {
       statusCode: 200,
       headers: {
         "content-type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ message: "Movie deleted" }),
     };
   } catch (error: any) {
     console.log(JSON.stringify(error));
@@ -43,7 +42,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
       headers: {
         "content-type": "application/json",
       },
-      body: JSON.stringify({ error }),
+      body: JSON.stringify({
+        error: error.message || "Failed to delete movie",
+      }),
     };
   }
 };
